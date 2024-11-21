@@ -6,8 +6,14 @@ Este proyecto utiliza `Docker` y `docker-compose` para gestionar los servicios n
 
 Asegúrate de tener instalados los siguientes componentes:
 
-1. **Docker**: Puedes descargarlo e instalarlo desde [Docker Desktop](https://www.docker.com/products/docker-desktop).
-2. **Docker Compose**: cuando instalas Docker este ya viene por defecto.
+1. **Virtualización**: Tener virtualización activada desde BIOS
+2. **Docker**: Puedes descargarlo e instalarlo desde [Docker Desktop](https://www.docker.com/products/docker-desktop).
+3. **WSL 2**: Necesario ejecutar Docker, en caso de no tenerlo y que Docker Desktop no te lo proporcione instala con:
+[Documentación Microsoft](https://learn.microsoft.com/es-es/windows/wsl/install).
+```bash
+wsl --install
+```
+4. **Docker Compose**: cuando instalas Docker este ya viene por defecto.
 
 ## Archivos necesarios
 
