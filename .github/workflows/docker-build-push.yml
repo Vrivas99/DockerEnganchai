@@ -1,0 +1,54 @@
+name: Build and Push Docker Images
+
+on:
+  # Ejecutar el flujo solo cuando se cree o actualice un pull request hacia main
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images to DockerHub
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout del código
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Log in to DockerHub
+      - name: Log in to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Build and push the Flask image with versioning
+      - name: Build and Push Flask Image
+        run: |
+          IMAGE_TAG="flask-$(date +%Y%m%d%H%M)"
+          docker build -f server/flask/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:flask
+          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          docker push vicenterivas/enganchai:flask
+
+      # Build and push the Express image with versioning
+      - name: Build and Push Express Image
+        run: |
+          IMAGE_TAG="express-$(date +%Y%m%d%H%M)"
+          docker build -f server/express/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:express
+          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          docker push vicenterivas/enganchai:express
+
+      # Build and push the Client image with versioning
+      - name: Build and Push Client Image
+        run: |
+          IMAGE_TAG="client-$(date +%Y%m%d%H%M)"
+          docker build -f client/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:client
+          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          docker push vicenterivas/enganchai:client

@@ -353,8 +353,8 @@ def displayStream():
                     
                     #Textos de estados resagados (abajo)
                     #drawCv2Text(frame,
-                     #   f'{otherLabels[0][0][0:1]} %{round(otherLabels[0][1]*100)}, {otherLabels[1][0][0:1]} %{round(otherLabels[1][1]*100)},{otherLabels[2][0][0:1]} %{round(otherLabels[2][1]*100)}'
-                      #  ,(x1, y2),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,(255,255,255),1)
+                    #   f'{otherLabels[0][0][0:1]} %{round(otherLabels[0][1]*100)}, {otherLabels[1][0][0:1]} %{round(otherLabels[1][1]*100)},{otherLabels[2][0][0:1]} %{round(otherLabels[2][1]*100)}'
+                    #  ,(x1, y2),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,(255,255,255),1)
 
                 #region Enviar los frames a la pantalla
 
