@@ -150,7 +150,7 @@ const Navbar = () => {
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem>
-                                <Link href="#" className="text-neutral-900">
+                                <Link href="/" className="text-neutral-900">
                                     Historial de Sesiones
                                 </Link>
                             </DropdownMenuItem>
