@@ -30,7 +30,7 @@ jobs:
       - name: Build and Push Flask Image
         run: |
           IMAGE_TAG="flask-$(date +%Y%m%d%H%M)"
-          docker build -f server/flask/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker build -f server/flask/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} server/flask
           docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:flask
           docker push vicenterivas/enganchai:${IMAGE_TAG}
           docker push vicenterivas/enganchai:flask
@@ -39,7 +39,7 @@ jobs:
       - name: Build and Push Express Image
         run: |
           IMAGE_TAG="express-$(date +%Y%m%d%H%M)"
-          docker build -f server/express/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker build -f server/express/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} server/express
           docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:express
           docker push vicenterivas/enganchai:${IMAGE_TAG}
           docker push vicenterivas/enganchai:express
@@ -48,7 +48,7 @@ jobs:
       - name: Build and Push Client Image
         run: |
           IMAGE_TAG="client-$(date +%Y%m%d%H%M)"
-          docker build -f client/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} .
+          docker build -f client/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} client
           docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:client
           docker push vicenterivas/enganchai:${IMAGE_TAG}
           docker push vicenterivas/enganchai:client
