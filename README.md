@@ -20,6 +20,44 @@ wsl --install
 - Dockerfile
 - docker-compose.yml
 - .env
+---
+# Para Ejecutar
+
+## Crear archivo **docker-compose.yml** en directorio de preferencia
+```yaml
+services:
+  client:
+    image: vicenterivas/enganchai:client
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_EXPRESS_MIDDLEWARE: "http://express:5000"
+    depends_on:
+      - express
+      - flask
+
+  express:
+    image: vicenterivas/enganchai:express
+    ports:
+      - "5000:5000"
+    depends_on:
+      - flask
+
+  flask:
+    image: vicenterivas/enganchai:flask
+    ports:
+      - "5001:5001"
+  
+```
+
+## Levantar proyecto
+```bash
+docker compose up
+```
+
+
+---
+# Para desarrollo
 
 ## Build e inicializar Docker-compose
 ```bash
