@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import { useRecording } from '@/context/RecordingContext';
 import { useMetrics } from '@/context/MetricsContext';
 import { useUser } from '@/context/UserContext';
+import { useClass } from '@/context/ClassContext';
 
 // Imports de componentes
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,22 +27,36 @@ const Navbar = () => {
 
     // Constantes de contexto
     const { isRecording, handleRecording, setSessionTime } = useRecording(); // Usa el estado global
-    const {user, logout} = useUser();
-    const { metrics } = useMetrics();
+    const { user, logout } = useUser();
+    const { metrics, engagedHistory, sessionReport } = useMetrics();
+    const { getAssignmentId } = useClass();
 
     // Estados locales
     const [timer, setTimer] = useState(0);
     const [toastShown, setToastShown] = useState(false);
-    const pathname = usePathname(); // Obtener la ruta actual
+    const pathname = usePathname();
 
-    // Muestra un toast si hay más de 10 estudiantes frustrados
     useEffect(() => {
-        if (metrics?.stateCounts?.Frustrated > 10 && !toastShown && isRecording) {
-            toast.warning('¡Hay 10 o más estudiantes frustrados!');
-            setToastShown(true);
-            setTimeout(() => setToastShown(false), 10000);
-        }
+        // Mapea los mensajes de alerta para cada estado relevante
+        const alertMessages: Record<'Frustrated' | 'Confused' | 'Bored', string> = {
+            Frustrated: '¡Hay 5 o más estudiantes frustrados!',
+            Confused: '¡Hay 5 o más estudiantes confundidos!',
+            Bored: '¡Hay 5 o más estudiantes aburridos!',
+        };
+    
+        // Itera sobre los estados relevantes
+        (Object.entries(alertMessages) as [keyof typeof alertMessages, string][]).forEach(([state, message]) => {
+            const count = metrics?.stateCounts?.[state] || 0;
+            if (count > 5 && !toastShown && isRecording) {
+                toast.warning(message);
+                setToastShown(true);
+                setTimeout(() => setToastShown(false), 10000);
+            }
+        });
     }, [metrics, toastShown]);
+    
+    
+
     // Temporizador para la grabación
     useEffect(() => {
         let interval: NodeJS.Timeout | null = null;
@@ -60,13 +75,32 @@ const Navbar = () => {
     //Realiza un POST hacia el server de express para cambiar el estado del stream
     const setVideoStream = async () => {
         try {
+            //Calcular promedio de engagement (Solo se enviara a la BD cuando inicie la sesion)
+            const totalPeople = sessionReport?.totalPeople ?? 1;
+            const promedioTotal = engagedHistory.map((entry) => {
+                // Calcula el promedio de engagement
+                const engagedPercentage = (entry.engagedCount / totalPeople) * 100;
+                // Limita el valor entre 0 y 100
+                return Math.min(Math.max(engagedPercentage, 0), 100);
+            });
+            const promedio = promedioTotal.reduce((a, b) => a + b, 0) / promedioTotal.length;
+            //quitar digitos decimales
+            const promedioFinal = promedio.toFixed(2);
+
+            console.log("ID SE ASIGNACION: ", getAssignmentId())
+
             const response = await fetch(`${process.env.NEXT_PUBLIC_EXPRESS_SERVER_URL}/api/setVideoStream`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ newState: !isRecording }), //Como el estado tarda en cambiar, se envia el contrario
+                body: JSON.stringify({
+                    newState: !isRecording,//Como el estado tarda en cambiar, se envia el contrario
+                    history: engagedHistory,
+                    avg: promedioFinal,//Promedio de engagement (Calculado ahora)
+                    asignation: getAssignmentId()//Id asignacion (usuario+seccion+sala)
+                }),
             });
 
             if (!response.ok) {
@@ -79,16 +113,16 @@ const Navbar = () => {
     };
     // Inicia o finaliza la grabación
     const startRecording = async () => {
+        setVideoStream();//Establece video en flask
         if (!isRecording) {
             setTimer(0); // Reinicia el temporizador solo si se inicia una nueva grabación
-            setVideoStream();//Establece video en flask
-        }else {
+        } else {
             setSessionTime(timer);
-            
+
         }
-        
+
         handleRecording(); // Cambia el estado de grabación
-        
+
     };
     // Formatea el tiempo en minutos y segundos
     const formatTime = (time: number) => {
@@ -150,7 +184,12 @@ const Navbar = () => {
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem>
-                                <Link href="#" className="text-neutral-900">
+                                <Link href="/video" className="text-neutral-900">
+                                    Ir a stream
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                                <Link href="/history-classes" className="text-neutral-900">
                                     Historial de Sesiones
                                 </Link>
                             </DropdownMenuItem>

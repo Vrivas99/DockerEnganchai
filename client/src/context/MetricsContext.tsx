@@ -54,6 +54,9 @@ export const MetricsProvider = ({ children }: { children: ReactNode }) => {
         let interval: NodeJS.Timeout | null = null;
 
         if (isRecording) {
+
+            clearEngagedHistory(); // Limpiar el historial de engaged al iniciar una nueva grabación
+
             const fetchMetrics = async () => {
                 try {
                     const response = await fetch(`${process.env.NEXT_PUBLIC_EXPRESS_SERVER_URL}/api/metrics`, {
