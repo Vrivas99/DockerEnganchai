@@ -7,15 +7,13 @@ from tensorflow.python.client import device_lib#Importar Usos de CUDA
 from ultralytics import YOLO
 import copy#Para copiar las metricas
 from collections import defaultdict#Para almacenar las id's
-#Cargar usuario y contraseña de la camara
-#from dotenv import load_dotenv
-#import os
+import threading
 #Crear multiprocesos para no saturar las funciones
 import queue
 #Crear queue para pasar los frames entre multiprocesos
 q=queue.Queue(maxsize=1)#procesStream()
 q2=queue.Queue(maxsize=2)#displayStream()
-import threading
+
 
 app = Flask(__name__)
 
@@ -55,7 +53,7 @@ if engagementModelName != None:
         print("CUDA no esta disponible, cargado modelo en CPU")
         engagementModel = tf.keras.models.load_model(engagementModelName)
 
-#Cargar mmodelo de Yolo
+#Cargar modelo de Yolo
 yoloModel = YOLO('best.pt')#yolov8n-face.pt # #Modelo yolo, cambiar a yolov8n-face.pt si solo se quiere detectar rostros
 #device = 'cuda' if torch.cuda.is_available() else 'cpu' #Cargar el modelo en la GPU si esta disponible (SOLO CUDA)
 yoloModel = yoloModel.to('cpu')#device
@@ -65,7 +63,7 @@ personIdCounter = 1
 activePersonIds = {}#Relación entre yoloTrackID y customPersonID
 
 #Datos de la camara
-camLink = "TestVideos/7.mp4"
+camLink = ""
 cap = None
 processVideo = False#Determina si el video se procesara o no (SI SOLO SE LEVANTARA EL SERVIDOR, DEBE ESTAR EN TRUE)
 
@@ -85,8 +83,6 @@ proNextFrame = True#Intenta poner al dia a procesStream
 #Cuando salga este print, el servidor flask habra iniciado por completo
 print("Tf version=",tf.__version__)
 print("Num GPUs Available=", len(tf.config.list_physical_devices('GPU')))
-print("\n///////\nstream in http://127.0.0.1:5001/videoFeed \n Metrics: http://127.0.0.1:5001/metrics \n///////\n")
-
 
 #Limpiar el contador de ID cuando no se detecten mas personas en un frame
 def resetIDCounter():
@@ -138,14 +134,7 @@ def receiveStream():
             #Intentar una reconexion
             initCV2(True)
             continue
-
-        #Poner los fps del stream en la imagen a enviar
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        fpsStream = fps
-
-        #FPS del stream
-        #cv2.putText(frame, f'FPS: {fps}', (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, [0,0,0], 2)
-
+        
         ##Redimensionar el frame si no cumple con la resolucion deseada
         if (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) != resWidth and int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) != resHeight):
             frame = cv2.resize(frame, (resWidth, resHeight))
@@ -176,7 +165,6 @@ def modelProcess(mode=0,detection=None,frame=None,cords=None):
             #Prediccion con un modelo keras (.h5,.keras)
             if face.size == 0:#Si el tamaño de algun rostro detectado es 0, saltar al siguiente frame
                 return False
-                #continue
 
             faceResized = cv2.resize(face, (224, 224))
             faceArray = np.expand_dims(faceResized, axis=0) / 255.0
@@ -198,7 +186,6 @@ def modelProcess(mode=0,detection=None,frame=None,cords=None):
                 else:
                     #Si no cumplio el umbral de confianza, continuar al siguiente frame y no dibujar el boundbox
                     return False
-                    #continue
                     
                 #Obtener los estados resagados
                 #otherIndex = [i for i in range(len(daiseeLabels)) if i != predictedIndex]
@@ -207,8 +194,6 @@ def modelProcess(mode=0,detection=None,frame=None,cords=None):
                 returnData.append(engagementState)#Estado
                 returnData.append(round(predictedProbabilities*100))#Confianza, es un decimal, se transforma directamente a porcentual
                 return returnData
-
-                
 
         case 1:#Utilizando solamente yolo
             engagementName = ""
@@ -241,25 +226,18 @@ def procesStream():
             if q.empty() !=True:
                 frame=q.get()#Recibir los frames de "receiveStream"
                 print("PS get frame")
-                #region procesar frames en yolo
                 frameCount = 0
                 
                 #Establecer metricas locales
                 metrics["totalPeople"] = 0
                 metrics["stateCounts"] = {"Frustrated": 0, "Confused": 0, "Bored": 0, "Engaged": 0}
                 metrics["Ids"] = {}
-                
-                #Mover el frame a GPU/CPU
-                #frameTensor = torch.from_numpy(frame).to(device)
-                
+
                 #Crear un data temporal para actualizar solo cuando este listo
                 tempData = []
                 # deteccion de objetos de YOLO
                 results = yoloModel.track(frame, persist=True)#track y persist=True para asignar id a lo identificado
-                
-                #Esto comprobaba los resultados de yolo, pero ya no es viable; 
-                #metrics["totalPeople"] = sum(1 for det in results[0].boxes if det.cls[0] == 0) #Contar personas detectadas (para comprobar que la suma de los estados es correcta)
-                
+
                 #Resultados de Yolo
                 if results and len(results[0].boxes) > 0:
                     #Se resetea el contador de IDs
@@ -284,7 +262,7 @@ def procesStream():
                             processReturn = modelProcess(1,detection,frame,[x1,y1,x2,y2])
 
                             #Si modelProcess() devuelve false, procesar el siguiente frame
-                            if processReturn == None:
+                            if processReturn == False:
                                 continue
 
                             engagementState = processReturn[0]
@@ -328,9 +306,7 @@ def displayStream():
                     if i >= len(dataStream):
                         print("//////////BREAK PARA EVITAR ERROR//////////")
                         break
-                    #print("LenData=",len(dataStream))
-                    #print("I=",i)
-                    #print("DataStream[i]=",dataStream[i])
+                    
                     #Es mas legible crear variables locales que poner todo el listado como argumento
                     engagementState = dataStream[i]["engagementState"]
                     x1 = dataStream[i]["x1"]

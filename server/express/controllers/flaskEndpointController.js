@@ -8,11 +8,12 @@ let currentSecond = 0;//Segundo actual de la sesion
 const storeFrequency = 1;   //Cada cuantos segundos se almacenaran las metricas
 let lastStoredSecond = 0;//Ultimo segundo que se almaceno las metricas
 
-async function sessionMetricsDB(metric, Asign){
+async function sessionMetricsDB(metric, avg, Asign){
     // Enviar las métricas a /db para almacenarlas en la base de datos
     try {
         await axios.post(`${process.env.NEXT_PUBLIC_EXPRESS_SERVER_URL}/db/storeSessionMetrics`, {
             metrics: JSON.stringify(metric),//Asegurarse que esten en formato JSON
+            AVG: avg,
             Asignacion: Asign
         });
         console.log('Metricas enviadas a la API');
@@ -41,7 +42,6 @@ async function flaskStream(req, res) {
 
 async function metrics(req, res) {
     try {
-        console.log("get metricas")
 
         //Recoje las metricas desde flask
         const response = await axios({
@@ -119,7 +119,7 @@ async function setConfidence(req, res) {
 };
 
 async function setVideoStream(req, res) {
-    const { newState, sessionMetrics, Asignation } = req.body;
+    const { newState, history, avg, asignation} = req.body;
 
     console.log("set video stream: ",newState)
     try {
@@ -154,7 +154,9 @@ async function setVideoStream(req, res) {
 
         if (newState == false){
             console.log("Metricas de sesion finalizada: ")
-            //sessionMetricsDB(sessionMetrics,Asignation)//Enviar las metricas a /db
+            console.log(history)
+            
+            sessionMetricsDB(history,avg,asignation)//Enviar las metricas a /db
         }
 
         // Devolver la respuesta a Express
