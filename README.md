@@ -19,11 +19,6 @@ wsl --install
 ```
 4. **Docker Compose**: cuando instalas Docker este ya viene por defecto.
 
-## Archivos necesarios
-
-- Dockerfile
-- docker-compose.yml
-- .env
 ---
 # Para Ejecutar
 
@@ -54,6 +49,11 @@ services:
   
 ```
 
+## Descargar Imagenes
+```bash
+docker compose pull
+```
+
 ## Levantar proyecto
 ```bash
 docker compose up
@@ -62,6 +62,12 @@ docker compose up
 
 ---
 # Para desarrollo
+
+## Archivos necesarios
+
+- Dockerfile
+- docker-compose.yml
+- .env
 
 ## Build e inicializar Docker-compose
 ```bash
