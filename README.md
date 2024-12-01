@@ -2,7 +2,11 @@
 
 Este proyecto utiliza `Docker` y `docker-compose` para gestionar los servicios necesarios.
 
-## Requisitos
+## Requisitos Linux
+
+1. **Docker**: Puedes descargarlo e instalarlo desde [Docker Desktop](https://www.docker.com/products/docker-desktop).
+
+## Requisitos Windows
 
 Asegúrate de tener instalados los siguientes componentes:
 
