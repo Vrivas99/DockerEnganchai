@@ -1,54 +1,175 @@
 name: Build and Push Docker Images
 
+concurrency:
+  group: build-and-push-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
-  # Ejecutar el flujo solo cuando se cree o actualice un pull request hacia main
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
+    paths:
+      - 'server/flask/**'
+      - 'server/express/**'
+      - 'client/**'
+      - 'server/flask/Dockerfile'
+      - 'server/express/Dockerfile'
+      - 'client/Dockerfile'
+      - 'server/flask/requirements.txt'
+      - 'server/express/package-lock.json'
+      - 'client/package-lock.json'
+      - 'yarn.lock'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'server/flask/**'
+      - 'server/express/**'
+      - 'client/**'
+      - 'server/flask/Dockerfile'
+      - 'server/express/Dockerfile'
+      - 'client/Dockerfile'
+      - 'server/flask/requirements.txt'
+      - 'server/express/package-lock.json'
+      - 'client/package-lock.json'
+      - 'yarn.lock'
 
 jobs:
-  build-and-push:
-    name: Build and Push Docker Images to DockerHub
+  determine-version:
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
     steps:
-      # Checkout del código
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Set version
+        id: set-version
+        run: |
+          if [[ "${GITHUB_REF##*/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+          fi
 
-      # Log in to DockerHub
-      - name: Log in to DockerHub
+  build-flask:
+    needs: determine-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build and push the Flask image with versioning
-      - name: Build and Push Flask Image
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Pull cache (flask)
+        run: docker pull vicenterivas/enganchai:flask || true
+
+      - name: Build & Push Flask
         run: |
-          IMAGE_TAG="flask-$(date +%Y%m%d%H%M)"
-          docker build -f server/flask/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} server/flask
-          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:flask
-          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          TAG=${{ needs.determine-version.outputs.version }}
+          docker build \
+            --cache-from=vicenterivas/enganchai:flask \
+            -f server/flask/Dockerfile \
+            -t vicenterivas/enganchai:${TAG} \
+            -t vicenterivas/enganchai:flask \
+            server/flask
+          docker push vicenterivas/enganchai:${TAG}
           docker push vicenterivas/enganchai:flask
 
-      # Build and push the Express image with versioning
-      - name: Build and Push Express Image
+  build-express:
+    needs: determine-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Pull cache (express)
+        run: docker pull vicenterivas/enganchai:express || true
+
+      - name: Build & Push Express
         run: |
-          IMAGE_TAG="express-$(date +%Y%m%d%H%M)"
-          docker build -f server/express/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} server/express
-          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:express
-          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          TAG=${{ needs.determine-version.outputs.version }}
+          docker build \
+            --cache-from=vicenterivas/enganchai:express \
+            -f server/express/Dockerfile \
+            -t vicenterivas/enganchai:${TAG} \
+            -t vicenterivas/enganchai:express \
+            server/express
+          docker push vicenterivas/enganchai:${TAG}
           docker push vicenterivas/enganchai:express
 
-      # Build and push the Client image with versioning
-      - name: Build and Push Client Image
+  build-client:
+    needs: determine-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Pull cache (client)
+        run: docker pull vicenterivas/enganchai:client || true
+
+      - name: Build & Push Client
         run: |
-          IMAGE_TAG="client-$(date +%Y%m%d%H%M)"
-          docker build -f client/Dockerfile -t vicenterivas/enganchai:${IMAGE_TAG} client
-          docker tag vicenterivas/enganchai:${IMAGE_TAG} vicenterivas/enganchai:client
-          docker push vicenterivas/enganchai:${IMAGE_TAG}
+          TAG=${{ needs.determine-version.outputs.version }}
+          docker build \
+            --cache-from=vicenterivas/enganchai:client \
+            -f client/Dockerfile \
+            -t vicenterivas/enganchai:${TAG} \
+            -t vicenterivas/enganchai:client \
+            client
+          docker push vicenterivas/enganchai:${TAG}
           docker push vicenterivas/enganchai:client
+
+  cleanup:
+    name: Cleanup Old Tags
+    runs-on: ubuntu-latest
+    needs: [build-flask, build-express, build-client]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Delete old tags
+        env:
+          REPO: "vicenterivas/enganchai"
+        run: |
+          # 1) Obtener token
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST https://hub.docker.com/v2/users/login/ \
+            -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}" \
+            | jq -r .token)
+          # 2) Listar tags, ordenar por fecha y quitar el más reciente
+          TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
+            "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
+            | jq -r '.results | sort_by(.last_updated) | .[0:-1] | .[].name')
+          # 3) Borrar los antiguos
+          for tag in $TAGS; do
+            curl -s -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/"
+            echo "Deleted tag: $tag"
+          done
