@@ -1,4 +1,6 @@
 services:
+
+  # 1) NextJS client Docker
   client:
     build:
       context: ./client
@@ -14,8 +16,24 @@ services:
       NEXT_PUBLIC_EXPRESS_MIDDLEWARE: "http://express:5000"
     depends_on:
       - express
-      - flask
 
+  # 2) Oracle DB 21c Docker
+  oracle-db:
+    image: gvenzl/oracle-xe:21-slim-faststart             # Imagen pública en Docker Hub :contentReference[oaicite:5]{index=5}
+    platform: linux/amd64                                 # Solo si se ejecuta en Mac ya que se emula en AMD64 con Rosetta 2
+    #image: container-registry.oracle.com/database/enterprise:21.3.0 # Imagen oficial (Necesita auth y cuenta de Oracle)
+    env_file:
+      - ./.env
+    environment:
+      - ORACLE_PASSWORD=${ORACLE_PASSWORD}                # Contraseña para SYS/SYSTEM :contentReference[oaicite:6]{index=6}
+      # - ORACLE_RANDOM_PASSWORD=y                        # Alternativa para generar password al azar :contentReference[oaicite:7]{index=7}
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata                   # Persistencia de datos
+      - ./db-scripts/setup:/container-entrypoint-initdb.d # Scripts DDL auto-exec :contentReference[oaicite:8]{index=8}
+
+  # 3) API express Docker
   express:
     build:
       context: ./server/express
@@ -24,12 +42,17 @@ services:
       - "5000:5000"
     env_file:
       - ./server/express/.env
+    environment:
+      - DBHOST=oracle-db   # Host del contenedor Oracle
+      - ORACLE_PDB=XEPDB1  # Nombre de PDB por defecto :contentReference[oaicite:9]{index=9}
     volumes:
       - ./server/express:/server/express
       - /server/express/node_modules
     depends_on:
+      - oracle-db
       - flask
 
+  # 4) Servicio Flask Docker
   flask:
     build:
       context: ./server/flask
@@ -38,3 +61,6 @@ services:
       - "5001:5001"
     volumes:
       - ./server/flask:/server/flask
+
+volumes:
+  oracle_data:
