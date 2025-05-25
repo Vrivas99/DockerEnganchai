@@ -9,10 +9,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-    paths: […]
-
-  push:
-    branches: [ main ]
     paths:
       - 'server/flask/**'
       - 'server/express/**'
