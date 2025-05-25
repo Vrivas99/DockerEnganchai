@@ -6,24 +6,7 @@ concurrency:
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*.*.*'
-    paths:
-      - 'server/flask/**'
-      - 'server/express/**'
-      - 'client/**'
-      - 'server/flask/Dockerfile'
-      - 'server/express/Dockerfile'
-      - 'client/Dockerfile'
-      - 'server/flask/requirements.txt'
-      - 'server/express/package-lock.json'
-      - 'client/package-lock.json'
-      - 'yarn.lock'
-  pull_request:
-    branches:
-      - main
+    branches: [ main ]
     paths:
       - 'server/flask/**'
       - 'server/express/**'
@@ -37,52 +20,61 @@ on:
       - 'yarn.lock'
 
 jobs:
-  determine-version:
+  build-flask:
+    name: Build & Push Flask
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.set-version.outputs.version }}
     steps:
-      - name: Set version
-        id: set-version
+      - uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build, push tmp and promote
         run: |
-          if [[ "${GITHUB_REF##*/}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "version=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          REMOTE_LATEST="vicenterivas/enganchai:flask-latest"
+          REMOTE_OLD="vicenterivas/enganchai:flask-old"
+          TMP_TAG="vicenterivas/enganchai:flask-tmp"
+
+          # Pull old latest (if exists) to enable cache
+          docker pull $REMOTE_LATEST || true
+          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
+
+          # Build to tmp and push it
+          docker build \
+            --cache-from=$REMOTE_LATEST \
+            -f server/flask/Dockerfile \
+            -t $TMP_TAG \
+            server/flask
+
+          docker push $TMP_TAG
+
+          # If push succeeded, promote tags
+          if [ $? -eq 0 ]; then
+            # Tag tmp → latest and push
+            docker tag $TMP_TAG $REMOTE_LATEST
+            docker push $REMOTE_LATEST
+
+            # Only if there was a previous latest, tag it → old and push
+            if [ -n "$OLD_ID" ]; then
+              docker tag $REMOTE_LATEST $REMOTE_OLD
+              docker push $REMOTE_OLD
+            fi
           else
-            echo "version=latest" >> $GITHUB_OUTPUT
+            echo "❌ Flask tmp build/push failed — no se tocan latest/old tags."
+            exit 1
           fi
 
-  build-flask:
-    needs: determine-version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Set up QEMU & Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Pull cache (flask)
-        run: docker pull vicenterivas/enganchai:flask || true
-
-      - name: Build & Push Flask
-        run: |
-          TAG=${{ needs.determine-version.outputs.version }}
-          docker build \
-            --cache-from=vicenterivas/enganchai:flask \
-            -f server/flask/Dockerfile \
-            -t vicenterivas/enganchai:${TAG} \
-            -t vicenterivas/enganchai:flask \
-            server/flask
-          docker push vicenterivas/enganchai:${TAG}
-          docker push vicenterivas/enganchai:flask
+          # Cleanup local tmp
+          docker rmi $TMP_TAG
 
   build-express:
-    needs: determine-version
+    name: Build & Push Express
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -93,26 +85,50 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Cache Express deps
+        uses: actions/cache@v3
+        with:
+          path: server/express/node_modules
+          key: ${{ runner.os }}-express-deps-${{ hashFiles('server/express/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-express-deps-
+
       - name: Set up QEMU & Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Pull cache (express)
-        run: docker pull vicenterivas/enganchai:express || true
-
-      - name: Build & Push Express
+      - name: Build, push tmp and promote
         run: |
-          TAG=${{ needs.determine-version.outputs.version }}
+          REMOTE_LATEST="vicenterivas/enganchai:express-latest"
+          REMOTE_OLD="vicenterivas/enganchai:express-old"
+          TMP_TAG="vicenterivas/enganchai:express-tmp"
+
+          docker pull $REMOTE_LATEST || true
+          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
+
           docker build \
-            --cache-from=vicenterivas/enganchai:express \
+            --cache-from=$REMOTE_LATEST \
             -f server/express/Dockerfile \
-            -t vicenterivas/enganchai:${TAG} \
-            -t vicenterivas/enganchai:express \
+            -t $TMP_TAG \
             server/express
-          docker push vicenterivas/enganchai:${TAG}
-          docker push vicenterivas/enganchai:express
+
+          docker push $TMP_TAG
+
+          if [ $? -eq 0 ]; then
+            docker tag $TMP_TAG $REMOTE_LATEST
+            docker push $REMOTE_LATEST
+
+            if [ -n "$OLD_ID" ]; then
+              docker tag $REMOTE_LATEST $REMOTE_OLD
+              docker push $REMOTE_OLD
+            fi
+          else
+            echo "❌ Express tmp build/push failed — no se tocan latest/old tags."
+            exit 1
+          fi
+
+          docker rmi $TMP_TAG
 
   build-client:
-    needs: determine-version
+    name: Build & Push Client
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -123,28 +139,52 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Cache Client deps
+        uses: actions/cache@v3
+        with:
+          path: client/node_modules
+          key: ${{ runner.os }}-client-deps-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-client-deps-
+
       - name: Set up QEMU & Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Pull cache (client)
-        run: docker pull vicenterivas/enganchai:client || true
-
-      - name: Build & Push Client
+      - name: Build, push tmp and promote
         run: |
-          TAG=${{ needs.determine-version.outputs.version }}
+          REMOTE_LATEST="vicenterivas/enganchai:client-latest"
+          REMOTE_OLD="vicenterivas/enganchai:client-old"
+          TMP_TAG="vicenterivas/enganchai:client-tmp"
+
+          docker pull $REMOTE_LATEST || true
+          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
+
           docker build \
-            --cache-from=vicenterivas/enganchai:client \
+            --cache-from=$REMOTE_LATEST \
             -f client/Dockerfile \
-            -t vicenterivas/enganchai:${TAG} \
-            -t vicenterivas/enganchai:client \
+            -t $TMP_TAG \
             client
-          docker push vicenterivas/enganchai:${TAG}
-          docker push vicenterivas/enganchai:client
+
+          docker push $TMP_TAG
+
+          if [ $? -eq 0 ]; then
+            docker tag $TMP_TAG $REMOTE_LATEST
+            docker push $REMOTE_LATEST
+
+            if [ -n "$OLD_ID" ]; then
+              docker tag $REMOTE_LATEST $REMOTE_OLD
+              docker push $REMOTE_OLD
+            fi
+          else
+            echo "❌ Client tmp build/push failed — no se tocan latest/old tags."
+            exit 1
+          fi
+
+          docker rmi $TMP_TAG
 
   cleanup:
     name: Cleanup Old Tags
-    runs-on: ubuntu-latest
     needs: [build-flask, build-express, build-client]
+    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Login to Docker Hub
@@ -153,23 +193,23 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Delete old tags
+      - name: Delete all *-old tags
         env:
           REPO: "vicenterivas/enganchai"
         run: |
-          # 1) Obtener token
           TOKEN=$(curl -s -H "Content-Type: application/json" \
             -X POST https://hub.docker.com/v2/users/login/ \
             -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}" \
             | jq -r .token)
-          # 2) Listar tags, ordenar por fecha y quitar el más reciente
+
+          # Elimina todos los tags que terminen en -old
           TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
             "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
-            | jq -r '.results | sort_by(.last_updated) | .[0:-1] | .[].name')
-          # 3) Borrar los antiguos
+            | jq -r '.results[].name | select(test("-old$"))')
+
           for tag in $TAGS; do
+            echo "Deleting old tag: $tag"
             curl -s -X DELETE \
               -H "Authorization: JWT $TOKEN" \
               "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/"
-            echo "Deleted tag: $tag"
           done
