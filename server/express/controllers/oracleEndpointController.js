@@ -130,41 +130,74 @@ async function login(req,res){
     }
 };
 
-async function register(req,res){
-    try{
-        const {nombre, correo, contrasenna} = req.body;
-        const avatar = req.file.path;
+async function register(req, res) {
+  let connection;
+  try {
+    const { nombre, correo, contrasenna } = req.body;
+    const avatarPath = req.file?.path;  // puede venir undefined
 
-        const oracle = await getDBConnection();
+    connection = await getDBConnection();
 
-        //Confirmar que el usuario (correo) no exista antes de registrarlo
-        const resCount = await oracle.execute(
-            'SELECT COUNT(*) FROM USUARIOS WHERE CORREO=:correo',
-            { correo: correo}, 
-            { outFormat: oracledb.OBJECT }
-        );
-
-        //Usuario ya existente
-        if (result.rows[0]["COUNT(*)"] != 0){
-            return res.status(400).json({ error: 'Usuario ya existente' });
-        }
-
-        //Si el usuario(correo) no existia, iniciar proceso:
-        //Encriptar contraseña
-        const passwordHash  = await encrypt(contrasenna);
-        //Insertar Avatar en el bucket y retornar el link
-        const avatarLink = await uploadAvatar(avatar,`pfp${correo}.png`);
-
-        const result = await oracle.execute(
-            'INSERT INTO USUARIOS (IDUSUARIO, NOMBRE, CORREO, CONTRASENNA, CONFIG_IDCONFIGURACION) VALUES (0,:nombre,:correo,:contrasenna,:avatar,0)',
-            { nombre: nombre, correo: correo, contrasenna: passwordHash, avatar: avatarLink}, 
-            { outFormat: oracledb.OBJECT }
-        );
-        res.status(200).json({ res: "Usuario registrado con exito" });
-    } catch(err){
-        return res.status(400).json({ error: 'Error al registrarse', err: err.message });
+    // 1) Comprobar existencia
+    const countResult = await connection.execute(
+      `SELECT COUNT(*) AS TOTAL 
+         FROM USUARIOS 
+        WHERE CORREO = :correo`,
+      { correo },
+      { outFormat: oracledb.OBJECT }
+    );
+    const total = countResult.rows[0].TOTAL;
+    if (total > 0) {
+      return res.status(400).json({ error: 'Usuario ya existente' });
     }
-};
+
+    // 2) Encriptar contraseña
+    const hash = await encrypt(contrasenna);
+
+    // 3) Subir avatar y obtener URL (si tienes avatarPath)
+    const avatarLink = avatarPath
+      ? await uploadAvatar(avatarPath, `pfp_${correo}.png`)
+      : null;
+
+    // 4) Insertar usando la secuencia USUARIOS_SEQ
+    const insertSql = `
+      INSERT INTO USUARIOS (
+        IDUSUARIO,
+        NOMBRE,
+        CORREO,
+        CONTRASENNA,
+        AVATAR,
+        CONFIG_IDCONFIGURACION
+      ) VALUES (
+        USUARIOS_SEQ.NEXTVAL,
+        :nombre,
+        :correo,
+        :hash,
+        :avatar,
+        :config
+      )`;
+    const binds = {
+      nombre,
+      correo,
+      hash,
+      avatar: avatarLink,
+      config: 0
+    };
+    await connection.execute(insertSql, binds, { autoCommit: true });
+
+    return res.status(201).json({ message: 'Usuario registrado con éxito' });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ error: 'Error al registrarse', details: err.message });
+  } finally {
+    if (connection) {
+      try { await connection.close(); }
+      catch (_) { /* ignore */ }
+    }
+  }
+}
 
 async function UpdateUserConfidence(req,res) {
     try{

@@ -43,8 +43,8 @@ services:
     env_file:
       - ./server/express/.env
     environment:
-      - DBHOST=oracle-db   # Host del contenedor Oracle
-      - ORACLE_PDB=XEPDB1  # Nombre de PDB por defecto :contentReference[oaicite:9]{index=9}
+      - DBHOST=${DBHOST}   # Host del contenedor Oracle
+      - ORACLE_PDB=${ORACLE_PDB}  # Nombre de PDB por defecto :contentReference[oaicite:9]{index=9}
     volumes:
       - ./server/express:/server/express
       - /server/express/node_modules

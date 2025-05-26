@@ -1,16 +1,13 @@
-const oracledb = require('oracledb')
-const path = require('path');
-let connection;
+const oracledb = require('oracledb');
 
 async function getDBConnection() {
-  if (!connection){
-    connection = await oracledb.getConnection({
-        user: process.env.DBUSER,
-        password: process.env.DBPASS,
-        connectString: `${process.env.DBHOST}:1521/XEPDB1`
-    });
-    console.log('🟢 Oracle conectado');
-  }
+  // Abre una nueva conexión en cada llamada para evitar conexiones cerradas
+  const connection = await oracledb.getConnection({
+    user:         process.env.DBUSER,
+    password:     process.env.DBPASS,
+    connectString:`${process.env.DBHOST}:1521/${process.env.ORACLE_PDB}`
+  });
+  console.log('🟢 Oracle conectado');
   return connection;
 }
 
