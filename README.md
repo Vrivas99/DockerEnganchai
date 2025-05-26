@@ -26,7 +26,7 @@ wsl --install
 ```yaml
 services:
   client:
-    image: vicenterivas/enganchai:client
+    image: vicenterivas/enganchai:client-latest
     ports:
       - "3000:3000"
     environment:
@@ -36,14 +36,14 @@ services:
       - flask
 
   express:
-    image: vicenterivas/enganchai:express
+    image: vicenterivas/enganchai:express-latest
     ports:
       - "5000:5000"
     depends_on:
       - flask
 
   flask:
-    image: vicenterivas/enganchai:flask
+    image: vicenterivas/enganchai:flask-latest
     ports:
       - "5001:5001"
   
