@@ -25,8 +25,42 @@ wsl --install
 ## Crear archivo **docker-compose.yml** en directorio de preferencia
 ```yaml
 services:
+  oracle-db:
+    image: vicenterivas/enganchai:oracle-db-latest
+    container_name: oracle-db
+    environment:
+      ORACLE_PASSWORD: "3ng4nchAI4adm1nUs3r"
+    ports:
+      - "1521:1521"   # Listener de Oracle
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM dual;' | sqlplus -s sys/${ORACLE_PASSWORD}@//localhost:1521/XEPDB1 as sysdba | grep -q \"1\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  flask:
+    image: vicenterivas/enganchai:flask-latest
+    container_name: flask
+    ports:
+      - "5001:5001"
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+
+  express:
+    image: vicenterivas/enganchai:express-latest
+    container_name: express
+    ports:
+      - "5000:5000"
+    depends_on:
+      - flask
+      - oracle-db
+
   client:
     image: vicenterivas/enganchai:client-latest
+    container_name: client
     ports:
       - "3000:3000"
     environment:
@@ -35,17 +69,10 @@ services:
       - express
       - flask
 
-  express:
-    image: vicenterivas/enganchai:express-latest
-    ports:
-      - "5000:5000"
-    depends_on:
-      - flask
+volumes:
+  oracle-data:
+    driver: local
 
-  flask:
-    image: vicenterivas/enganchai:flask-latest
-    ports:
-      - "5001:5001"
   
 ```
 
