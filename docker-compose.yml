@@ -31,7 +31,7 @@ services:
       - "1521:1521"
     volumes:
       - oracle_data:/opt/oracle/oradata                   # Persistencia de datos
-      - ./db-scripts/setup:/container-entrypoint-initdb.d # Scripts DDL auto-exec :contentReference[oaicite:8]{index=8}
+      - ./db-scripts/:/container-entrypoint-initdb.d # Scripts DDL auto-exec :contentReference[oaicite:8]{index=8}
 
   # 3) API express Docker
   express:

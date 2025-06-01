@@ -5,7 +5,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-
   workflow_dispatch:
   push:
     branches: [ main ]
@@ -16,10 +15,6 @@ on:
       - 'server/flask/Dockerfile'
       - 'server/express/Dockerfile'
       - 'client/Dockerfile'
-      - 'server/flask/requirements.txt'
-      - 'server/express/package-lock.json'
-      - 'client/package-lock.json'
-      - 'yarn.lock'
 
 jobs:
   build-flask:
@@ -43,26 +38,24 @@ jobs:
           REMOTE_OLD="vicenterivas/enganchai:flask-old"
           TMP_TAG="vicenterivas/enganchai:flask-tmp"
 
-          # Pull old latest (if exists) to enable cache
+          # Pull old latest (si existe) para cache
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
-          # Build to tmp and push it
+          # Construye imagen Flask → TMP, push TMP
           docker build \
             --cache-from=$REMOTE_LATEST \
             -f server/flask/Dockerfile \
             -t $TMP_TAG \
             server/flask
-
           docker push $TMP_TAG
 
-          # If push succeeded, promote tags
+          # Si el push TMP funcionó, promueve tags
           if [ $? -eq 0 ]; then
-            # Tag tmp → latest and push
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
-            # Only if there was a previous latest, tag it → old and push
+            # Si había un latest previo, taguéalo a “-old” y push
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -71,9 +64,6 @@ jobs:
             echo "❌ Flask tmp build/push failed — no se tocan latest/old tags."
             exit 1
           fi
-
-          # Cleanup local tmp
-          docker rmi $TMP_TAG
 
   build-express:
     name: Build & Push Express
@@ -91,8 +81,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: server/express/node_modules
-          key: ${{ runner.os }}-express-deps-${{ hashFiles('server/express/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-express-deps-
+          key: ${{ runner.os }}-express-${{ hashFiles('server/express/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-express-
 
       - name: Set up QEMU & Buildx
         uses: docker/setup-buildx-action@v2
@@ -103,21 +94,24 @@ jobs:
           REMOTE_OLD="vicenterivas/enganchai:express-old"
           TMP_TAG="vicenterivas/enganchai:express-tmp"
 
+          # Pull old latest (si existe) para cache
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
+          # Construye imagen Express → TMP, push TMP
           docker build \
             --cache-from=$REMOTE_LATEST \
             -f server/express/Dockerfile \
             -t $TMP_TAG \
             server/express
-
           docker push $TMP_TAG
 
+          # Si el push TMP funcionó, promueve tags
           if [ $? -eq 0 ]; then
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
+            # Si había un latest previo, taguéalo a “-old” y push
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -126,8 +120,6 @@ jobs:
             echo "❌ Express tmp build/push failed — no se tocan latest/old tags."
             exit 1
           fi
-
-          docker rmi $TMP_TAG
 
   build-client:
     name: Build & Push Client
@@ -145,8 +137,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: client/node_modules
-          key: ${{ runner.os }}-client-deps-${{ hashFiles('client/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-client-deps-
+          key: ${{ runner.os }}-client-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-client-
 
       - name: Set up QEMU & Buildx
         uses: docker/setup-buildx-action@v2
@@ -157,21 +150,24 @@ jobs:
           REMOTE_OLD="vicenterivas/enganchai:client-old"
           TMP_TAG="vicenterivas/enganchai:client-tmp"
 
+          # Pull old latest (si existe) para cache
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
+          # Construye imagen Client → TMP, push TMP
           docker build \
             --cache-from=$REMOTE_LATEST \
             -f client/Dockerfile \
             -t $TMP_TAG \
             client
-
           docker push $TMP_TAG
 
+          # Si el push TMP funcionó, promueve tags
           if [ $? -eq 0 ]; then
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
+            # Si había un latest previo, taguéalo a “-old” y push
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -181,11 +177,57 @@ jobs:
             exit 1
           fi
 
-          docker rmi $TMP_TAG
+  build-oracle-db:
+    name: Build & Push Oracle DB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
 
-  cleanup:
-    name: Cleanup Old Tags
-    needs: [build-flask, build-express, build-client]
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU & Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Pull, tag and push Oracle DB image
+        run: |
+          # Definimos nuestros tags en Docker Hub
+          REMOTE_LATEST="vicenterivas/enganchai:oracle-db-latest"
+          REMOTE_OLD="vicenterivas/enganchai:oracle-db-old"
+          TMP_TAG="vicenterivas/enganchai:oracle-db-tmp"
+
+          # Hacemos pull del posible latest existente (cache)
+          docker pull $REMOTE_LATEST || true
+          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
+
+          # Pull de la imagen oficial de Oracle DB 21c
+          docker pull gvenzl/oracle-xe:21-slim-faststart
+
+          # Tagueamos como TMP y lo subimos
+          docker tag gvenzl/oracle-xe:21-slim-faststart $TMP_TAG
+          docker push $TMP_TAG
+
+          # Si el push TMP funcionó, promovemos tags
+          if [ $? -eq 0 ]; then
+            docker tag $TMP_TAG $REMOTE_LATEST
+            docker push $REMOTE_LATEST
+
+            # Si existía un latest previo, lo renombramos a “-old” y lo subimos
+            if [ -n "$OLD_ID" ]; then
+              docker tag $REMOTE_LATEST $REMOTE_OLD
+              docker push $REMOTE_OLD
+            fi
+          else
+            echo "❌ Oracle DB tmp push failed — no se tocan latest/old tags."
+            exit 1
+          fi
+
+  cleanup-old-tags:
+    name: Delete all *-old tags
+    needs: [build-flask, build-express, build-client, build-oracle-db]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
@@ -209,9 +251,4 @@ jobs:
             "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
             | jq -r '.results[].name | select(test("-old$"))')
 
-          for tag in $TAGS; do
-            echo "Deleting old tag: $tag"
-            curl -s -X DELETE \
-              -H "Authorization: JWT $TOKEN" \
-              "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/"
-          done
+          for tag in
