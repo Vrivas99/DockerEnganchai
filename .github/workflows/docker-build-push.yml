@@ -251,4 +251,9 @@ jobs:
             "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
             | jq -r '.results[].name | select(test("-old$"))')
 
-          for tag in
+          for tag in $TAGS; doAdd commentMore actions
+            echo "Deleting old tag: $tag"
+            curl -s -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/"
+          done
