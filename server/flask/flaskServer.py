@@ -136,7 +136,7 @@ def receiveStream():
             continue
         
         ##Redimensionar el frame si no cumple con la resolucion deseada
-        if (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) != resWidth and int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) != resHeight):
+        if (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) != resWidth or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) != resHeight):
             frame = cv2.resize(frame, (resWidth, resHeight))
         
         #Enviar los frames a...
