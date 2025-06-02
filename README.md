@@ -24,18 +24,24 @@ wsl --install
 
 ## Crear archivo **docker-compose.yml** en directorio de preferencia
 ```yaml
+version: '3.8'
+
 services:
   oracle-db:
     image: vicenterivas/enganchai:oracle-db-latest
     container_name: oracle-db
+    env_file:
+      - ./.env
     environment:
-      ORACLE_PASSWORD: "3ng4nchAI4adm1nUs3r"
+      - ORACLE_PASSWORD=${ORACLE_PASSWORD}  # Contraseña para SYS/SYSTEM al inicializar XE
+      - ORACLE_PDB=${ORACLE_PDB}            # Nombre del PDB (XEPDB1)
     ports:
       - "1521:1521"   # Listener de Oracle
     volumes:
       - oracle-data:/opt/oracle/oradata
+      - ./db-scripts/:/container-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM dual;' | sqlplus -s sys/${ORACLE_PASSWORD}@//localhost:1521/XEPDB1 as sysdba | grep -q \"1\""]
+      test: ["CMD", "bash", "-c", "echo 'SELECT 1 FROM dual;' | sqlplus -s sys/${ORACLE_PASSWORD}@//localhost:1521/${ORACLE_PDB} as sysdba | grep -q \"1\""]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -52,6 +58,13 @@ services:
   express:
     image: vicenterivas/enganchai:express-latest
     container_name: express
+    env_file:
+      - ./.env
+    environment:
+      - DBUSER=${DBUSER}             # Usuario creado en la BD (por ejemplo, "admin")
+      - DBPASS=${DBPASS}             # Contraseña para ese usuario (p. ej. "3ng4nchAI4adm1nUs3r")
+      - DBHOST=${DBHOST}             # Debe ser "oracle-db", nombre del servicio
+      - ORACLE_PDB=${ORACLE_PDB}     # PDB name (XEPDB1)
     ports:
       - "5000:5000"
     depends_on:
@@ -72,8 +85,22 @@ services:
 volumes:
   oracle-data:
     driver: local
+```
 
-  
+## Descargar DB scripts
+
+Se debe descargar los scripts para crear y poblar tablas en Oracle DB 21c Express Edition
+
+## Configurar .env
+
+`ORACLE_PASSWORD` Puede ser modificado a su preferencia.
+
+```
+ORACLE_PASSWORD=Enganchadm1n
+DBHOST=oracle-db
+ORACLE_PDB=XEPDB1
+DBUSER=admin
+DBPASS=3ng4nchAI4adm1nUs3r
 ```
 
 ## Descargar Imagenes
