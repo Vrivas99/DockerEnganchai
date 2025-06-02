@@ -225,35 +225,59 @@ jobs:
             exit 1
           fi
 
-  cleanup-old-tags:
-    name: Delete all *-old tags
-    needs: [build-flask, build-express, build-client, build-oracle-db]
+  cleanup-old:
+    name: Delete tags ending with -old
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Delete all *-old tags
-        env:
-          REPO: "vicenterivas/enganchai"
+      - name: Fetch Docker Hub JWT token
+        id: get_token
         run: |
+          # Obtenemos un token JWT para la API de Docker Hub
           TOKEN=$(curl -s -H "Content-Type: application/json" \
             -X POST https://hub.docker.com/v2/users/login/ \
             -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}" \
             | jq -r .token)
 
-          # Elimina todos los tags que terminen en -old
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "❌ Error: no se pudo obtener token de Docker Hub."
+            exit 1
+          fi
+
+          echo "::set-output name=token::$TOKEN"
+
+      - name: List and delete tags ending in -old
+        env:
+          REPO: "vicenterivas/enganchai"
+          TOKEN: ${{ steps.get_token.outputs.token }}
+        run: |
+          # 1) Listar hasta 100 tags, filtrar los que terminen en "-old"
           TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
             "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
             | jq -r '.results[].name | select(test("-old$"))')
 
-          for tag in $TAGS; doAdd commentMore actions
-            echo "Deleting old tag: $tag"
-            curl -s -X DELETE \
+          if [ -z "$TAGS" ]; then
+            echo "ℹ️ No se encontraron tags que terminen en -old."
+            exit 0
+          fi
+
+          # 2) Iterar sobre cada tag encontrado y borrarlo vía API
+          for tag in $TAGS; do
+            echo "🗑️ Eliminando tag: $tag"
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X DELETE \
               -H "Authorization: JWT $TOKEN" \
-              "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/"
+              "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/")
+
+            if [ "$HTTP_STATUS" -eq 204 ]; then
+              echo "✅ Tag eliminado: $tag"
+            else
+              echo "❌ Falló al eliminar $tag (HTTP status: $HTTP_STATUS)"
+            fi
           done
