@@ -24,8 +24,6 @@ wsl --install
 
 ## Crear archivo **docker-compose.yml** en directorio de preferencia
 ```yaml
-version: '3.8'
-
 services:
   oracle-db:
     image: vicenterivas/enganchai:oracle-db-latest
