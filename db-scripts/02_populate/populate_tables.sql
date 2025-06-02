@@ -1,6 +1,7 @@
 -- seed_data.sql: solo INSERTs ordenados y compatibles con Oracle XE
 SET DEFINE OFF;
 ALTER SESSION SET CONTAINER = XEPDB1;
+ALTER SESSION SET CURRENT_SCHEMA = admin;
 
 -- ------------------------------------------------------------------
 -- 1) CONFIGURACIONES (padres)
