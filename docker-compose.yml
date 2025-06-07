@@ -16,6 +16,7 @@ services:
       NEXT_PUBLIC_EXPRESS_MIDDLEWARE: "http://express:5000"
     depends_on:
       - express
+      - flask
 
   # 2) Oracle DB 21c Docker
   oracle-db:

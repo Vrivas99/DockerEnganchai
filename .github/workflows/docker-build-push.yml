@@ -17,8 +17,35 @@ on:
       - 'client/Dockerfile'
 
 jobs:
+
+  filter:
+    runs-on: ubuntu-latest
+    outputs:
+      client: ${{ steps.paths.outputs.client }}
+      express: ${{ steps.paths.outputs.express }}
+      flask: ${{ steps.paths.outputs.flask }}
+      oracle: ${{ steps.paths.outputs.oracle }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Detect changed folders
+        id: paths
+        uses: dorny/paths-filter@v3
+        with:
+          filters:
+            client:
+              - 'client/**'
+            express:
+              - 'server/express/**'
+            flask:
+              - 'server/flask/**'
+            oracle:
+              - 'db-scripts/**'
+
   build-flask:
     name: Build & Push Flask
+    if: needs.filter.outputs.flask == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -67,6 +94,7 @@ jobs:
 
   build-express:
     name: Build & Push Express
+    if: needs.filter.outputs.express == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -123,6 +151,7 @@ jobs:
 
   build-client:
     name: Build & Push Client
+    if: needs.filter.outputs.client == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -179,6 +208,7 @@ jobs:
 
   build-oracle-db:
     name: Build & Push Oracle DB
+    if: needs.filter.outputs.oracle == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
