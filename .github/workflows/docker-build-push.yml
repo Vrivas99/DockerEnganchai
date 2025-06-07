@@ -45,6 +45,7 @@ jobs:
 
   build-flask:
     name: Build & Push Flask
+    needs: [filter]
     if: needs.filter.outputs.flask == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -94,6 +95,7 @@ jobs:
 
   build-express:
     name: Build & Push Express
+    needs: [filter]
     if: needs.filter.outputs.express == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -151,6 +153,7 @@ jobs:
 
   build-client:
     name: Build & Push Client
+    needs: [filter]
     if: needs.filter.outputs.client == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -208,6 +211,7 @@ jobs:
 
   build-oracle-db:
     name: Build & Push Oracle DB
+    needs: [filter]
     if: needs.filter.outputs.oracle == 'true'
     runs-on: ubuntu-latest
     steps:
