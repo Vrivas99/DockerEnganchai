@@ -58,10 +58,23 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 
+        uses: docker/setup-buildx-action@v3
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 
+        uses: docker/setup-qemu-action@v3
+
+      - name: Ensure tmp tag exists
+        run: |
+          REMOTE_LATEST="vicenterivas/enganchai:flask-latest"
+          TMP_TAG="vicenterivas/enganchai:flask-tmp"
+          # Si no podemos hacer pull de flask-tmp, lo recreamos desde latest
+          if ! docker pull $TMP_TAG; then
+            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
+            # Tiramos latest (cache) y taggeamos como tmp
+            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
+            docker tag $REMOTE_LATEST $TMP_TAG
+            docker push $TMP_TAG
+          fi
 
       - name: Build, push tmp and promote
         run: |
@@ -69,25 +82,28 @@ jobs:
           REMOTE_OLD="vicenterivas/enganchai:flask-old"
           TMP_TAG="vicenterivas/enganchai:flask-tmp"
 
-          # Pull old latest (si existe) para cache
+          # Pull old latest (para cache)
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
-          # Construye imagen Flask → TMP, push TMP
+          # Construye imagen Flask → TMP
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --cache-from=$REMOTE_LATEST \
+            --cache-from=type=registry,ref=$REMOTE_LATEST \
             -f server/flask/Dockerfile \
             -t $TMP_TAG \
             server/flask
+
+          # Push TMP
           docker push $TMP_TAG
 
-          # Si el push TMP funcionó, promueve tags
+          # Si el push TMP funcionó, promovemos tags
           if [ $? -eq 0 ]; then
+            # Latest ← TMP
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
-            # Si había un latest previo, taguéalo a “-old” y push
+            # Si había un latest previo, movemos ese a -old
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -98,7 +114,7 @@ jobs:
           fi
 
   build-express:
-    name: Build & Push Express
+    name: Build & Push Express (multi-arch)
     needs: [filter]
     if: needs.filter.outputs.express == 'true'
     runs-on: ubuntu-latest
@@ -111,45 +127,44 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Cache Express deps
-        uses: actions/cache@v3
-        with:
-          path: server/express/node_modules
-          key: ${{ runner.os }}-express-${{ hashFiles('server/express/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-express-
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 
+        uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 
+      - name: Ensure express-tmp tag exists
+        run: |
+          REMOTE_LATEST="vicenterivas/enganchai:express-latest"
+          TMP_TAG="vicenterivas/enganchai:express-tmp"
+          if ! docker pull $TMP_TAG; then
+            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
+            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
+            docker tag $REMOTE_LATEST $TMP_TAG
+            docker push $TMP_TAG
+          fi
 
-      - name: Build, push tmp and promote
+      - name: Build, push tmp and promote for Express
         run: |
           REMOTE_LATEST="vicenterivas/enganchai:express-latest"
           REMOTE_OLD="vicenterivas/enganchai:express-old"
           TMP_TAG="vicenterivas/enganchai:express-tmp"
 
-          # Pull old latest (si existe) para cache
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
-          # Construye imagen Express → TMP, push TMP
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --cache-from=$REMOTE_LATEST \
-            -f server/express/Dockerfile \
-            -t $TMP_TAG \
+            --cache-from=type=registry,ref=$REMOTE_LATEST \
+            --cache-to=type=inline \
+            --tag $TMP_TAG \
+            --push \
             server/express
-          docker push $TMP_TAG
 
-          # Si el push TMP funcionó, promueve tags
           if [ $? -eq 0 ]; then
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
-            # Si había un latest previo, taguéalo a “-old” y push
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -160,7 +175,7 @@ jobs:
           fi
 
   build-client:
-    name: Build & Push Client
+    name: Build & Push Client (multi-arch)
     needs: [filter]
     if: needs.filter.outputs.client == 'true'
     runs-on: ubuntu-latest
@@ -173,45 +188,44 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Cache Client deps
-        uses: actions/cache@v3
-        with:
-          path: client/node_modules
-          key: ${{ runner.os }}-client-${{ hashFiles('client/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-client-
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 
+        uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 
+      - name: Ensure client-tmp tag exists
+        run: |
+          REMOTE_LATEST="vicenterivas/enganchai:client-latest"
+          TMP_TAG="vicenterivas/enganchai:client-tmp"
+          if ! docker pull $TMP_TAG; then
+            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
+            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
+            docker tag $REMOTE_LATEST $TMP_TAG
+            docker push $TMP_TAG
+          fi
 
-      - name: Build, push tmp and promote
+      - name: Build, push tmp and promote for Client
         run: |
           REMOTE_LATEST="vicenterivas/enganchai:client-latest"
           REMOTE_OLD="vicenterivas/enganchai:client-old"
           TMP_TAG="vicenterivas/enganchai:client-tmp"
 
-          # Pull old latest (si existe) para cache
           docker pull $REMOTE_LATEST || true
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
-          # Construye imagen Client → TMP, push TMP
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --cache-from=$REMOTE_LATEST \
-            -f client/Dockerfile \
-            -t $TMP_TAG \
+            --cache-from=type=registry,ref=$REMOTE_LATEST \
+            --cache-to=type=inline \
+            --tag $TMP_TAG \
+            --push \
             client
-          docker push $TMP_TAG
 
-          # Si el push TMP funcionó, promueve tags
           if [ $? -eq 0 ]; then
             docker tag $TMP_TAG $REMOTE_LATEST
             docker push $REMOTE_LATEST
 
-            # Si había un latest previo, taguéalo a “-old” y push
             if [ -n "$OLD_ID" ]; then
               docker tag $REMOTE_LATEST $REMOTE_OLD
               docker push $REMOTE_OLD
@@ -220,6 +234,7 @@ jobs:
             echo "❌ Client tmp build/push failed — no se tocan latest/old tags."
             exit 1
           fi
+
 
   build-oracle-db:
     name: Build & Push Oracle DB
