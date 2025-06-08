@@ -92,6 +92,7 @@ jobs:
             --cache-from=type=registry,ref=$REMOTE_LATEST \
             -f server/flask/Dockerfile \
             -t $TMP_TAG \
+            --push \
             server/flask
 
           # Push TMP
