@@ -1,6 +1,7 @@
 const axios = require('axios');
 require('dotenv').config();
-let flaskIP = process.env.NEXT_PUBLIC_FLASK_SERVER_URL;
+let flaskIP = process.env.FLASK_SERVER_URL || 'http://localhost:5001';
+console.log('→ Usando flaskIP =', flaskIP);
 //Almacenar metricas en la BD
 let currentMetrics = null;
 let sessionMetrics = [];//Metricas totales de la sesion    
