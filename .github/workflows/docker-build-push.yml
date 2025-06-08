@@ -57,8 +57,11 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up QEMU & Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3 
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3 
 
       - name: Build, push tmp and promote
         run: |
@@ -71,7 +74,8 @@ jobs:
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
           # Construye imagen Flask → TMP, push TMP
-          docker build \
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --cache-from=$REMOTE_LATEST \
             -f server/flask/Dockerfile \
             -t $TMP_TAG \
@@ -115,8 +119,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-express-
 
-      - name: Set up QEMU & Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3 
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3 
 
       - name: Build, push tmp and promote
         run: |
@@ -129,7 +136,8 @@ jobs:
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
           # Construye imagen Express → TMP, push TMP
-          docker build \
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --cache-from=$REMOTE_LATEST \
             -f server/express/Dockerfile \
             -t $TMP_TAG \
@@ -173,8 +181,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-client-
 
-      - name: Set up QEMU & Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3 
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3 
 
       - name: Build, push tmp and promote
         run: |
@@ -187,7 +198,8 @@ jobs:
           OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
 
           # Construye imagen Client → TMP, push TMP
-          docker build \
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
             --cache-from=$REMOTE_LATEST \
             -f client/Dockerfile \
             -t $TMP_TAG \
@@ -223,8 +235,11 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up QEMU & Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3 
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3 
 
       - name: Pull, tag and push Oracle DB image
         run: |
