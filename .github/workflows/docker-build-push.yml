@@ -1,23 +1,16 @@
-name: Build and Push Docker Images
+name: Build & Push Docker Images
 
 concurrency:
   group: build-and-push-${{ github.ref }}
   cancel-in-progress: true
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
-    paths:
-      - 'server/flask/**'
-      - 'server/express/**'
-      - 'client/**'
-      - 'server/flask/Dockerfile'
-      - 'server/express/Dockerfile'
-      - 'client/Dockerfile'
+  workflow_dispatch:
 
 jobs:
-
+  # 1) Detectar qué carpetas cambiaron
   filter:
     runs-on: ubuntu-latest
     outputs:
@@ -33,7 +26,7 @@ jobs:
         id: paths
         uses: dorny/paths-filter@v3
         with:
-          filters: |
+          filters:
             client:
               - 'client/**'
             express:
@@ -43,202 +36,99 @@ jobs:
             oracle:
               - 'db-scripts/**'
 
-  build-flask:
-    name: Build & Push Flask
-    needs: [filter]
-    if: needs.filter.outputs.flask == 'true'
+  # 2) Matrix build para Client / Express / Flask
+  build-services:
+    needs: filter
     runs-on: ubuntu-latest
+    if: |
+      needs.filter.outputs.client == 'true' ||
+      needs.filter.outputs.express == 'true' ||
+      needs.filter.outputs.flask == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: client
+            context: client
+            dockerfile: client/Dockerfile
+            tmpTag: vicenterivas/enganchai:client-tmp
+            latestTag: vicenterivas/enganchai:client-latest
+            oldTag:   vicenterivas/enganchai:client-old
+            changed:  ${{ needs.filter.outputs.client }}
+          - name: express
+            context: server/express
+            dockerfile: server/express/Dockerfile
+            tmpTag: vicenterivas/enganchai:express-tmp
+            latestTag: vicenterivas/enganchai:express-latest
+            oldTag:   vicenterivas/enganchai:express-old
+            changed:  ${{ needs.filter.outputs.express }}
+          - name: flask
+            context: server/flask
+            dockerfile: server/flask/Dockerfile
+            tmpTag: vicenterivas/enganchai:flask-tmp
+            latestTag: vicenterivas/enganchai:flask-latest
+            oldTag:   vicenterivas/enganchai:flask-old
+            changed:  ${{ needs.filter.outputs.flask }}
+    # Solo ejecutar el paso si realmente cambió
+    if: matrix.changed == 'true'
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Login to Docker Hub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Ensure tmp tag exists
         run: |
-          REMOTE_LATEST="vicenterivas/enganchai:flask-latest"
-          TMP_TAG="vicenterivas/enganchai:flask-tmp"
-          # Si no podemos hacer pull de flask-tmp, lo recreamos desde latest
-          if ! docker pull $TMP_TAG; then
-            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
-            # Tiramos latest (cache) y taggeamos como tmp
-            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
-            docker tag $REMOTE_LATEST $TMP_TAG
-            docker push $TMP_TAG
+          echo "⏳ Verificando existencia de ${{ matrix.tmpTag }}…"
+          if ! docker pull ${{ matrix.tmpTag }}; then
+            echo "⚠️ ${matrix.tmpTag} no existe; recreando desde ${matrix.latestTag}"
+            docker pull ${matrix.latestTag} || { echo "❌ ${matrix.latestTag} no existe"; exit 1; }
+            docker tag ${matrix.latestTag} ${matrix.tmpTag}
+            docker push ${matrix.tmpTag}
           fi
 
-      - name: Build, push tmp and promote
+      - name: Build & push multi-arch → tmp
         run: |
-          REMOTE_LATEST="vicenterivas/enganchai:flask-latest"
-          REMOTE_OLD="vicenterivas/enganchai:flask-old"
-          TMP_TAG="vicenterivas/enganchai:flask-tmp"
-
-          # Pull old latest (para cache)
-          docker pull $REMOTE_LATEST || true
-          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
-
-          # Construye imagen Flask → TMP
+          echo "🔨 Building multi-arch ${matrix.name} → ${matrix.tmpTag}"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --cache-from=type=registry,ref=$REMOTE_LATEST \
-            -f server/flask/Dockerfile \
-            -t $TMP_TAG \
-            server/flask
-
-          # Push TMP
-          docker push $TMP_TAG
-
-          # Si el push TMP funcionó, promovemos tags
-          if [ $? -eq 0 ]; then
-            # Latest ← TMP
-            docker tag $TMP_TAG $REMOTE_LATEST
-            docker push $REMOTE_LATEST
-
-            # Si había un latest previo, movemos ese a -old
-            if [ -n "$OLD_ID" ]; then
-              docker tag $REMOTE_LATEST $REMOTE_OLD
-              docker push $REMOTE_OLD
-            fi
-          else
-            echo "❌ Flask tmp build/push failed — no se tocan latest/old tags."
-            exit 1
-          fi
-
-  build-express:
-    name: Build & Push Express (multi-arch)
-    needs: [filter]
-    if: needs.filter.outputs.express == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Ensure express-tmp tag exists
-        run: |
-          REMOTE_LATEST="vicenterivas/enganchai:express-latest"
-          TMP_TAG="vicenterivas/enganchai:express-tmp"
-          if ! docker pull $TMP_TAG; then
-            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
-            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
-            docker tag $REMOTE_LATEST $TMP_TAG
-            docker push $TMP_TAG
-          fi
-
-      - name: Build, push tmp and promote for Express
-        run: |
-          REMOTE_LATEST="vicenterivas/enganchai:express-latest"
-          REMOTE_OLD="vicenterivas/enganchai:express-old"
-          TMP_TAG="vicenterivas/enganchai:express-tmp"
-
-          docker pull $REMOTE_LATEST || true
-          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
-
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from=type=registry,ref=$REMOTE_LATEST \
+            --cache-from=type=registry,ref=${{ matrix.latestTag }} \
             --cache-to=type=inline \
-            --tag $TMP_TAG \
+            --file=${{ matrix.dockerfile }} \
+            --tag=${{ matrix.tmpTag }} \
             --push \
-            server/express
+            ${{ matrix.context }}
 
-          if [ $? -eq 0 ]; then
-            docker tag $TMP_TAG $REMOTE_LATEST
-            docker push $REMOTE_LATEST
-
-            if [ -n "$OLD_ID" ]; then
-              docker tag $REMOTE_LATEST $REMOTE_OLD
-              docker push $REMOTE_OLD
-            fi
-          else
-            echo "❌ Express tmp build/push failed — no se tocan latest/old tags."
-            exit 1
-          fi
-
-  build-client:
-    name: Build & Push Client (multi-arch)
-    needs: [filter]
-    if: needs.filter.outputs.client == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Ensure client-tmp tag exists
+      - name: Promote tmp → latest & rotate old
         run: |
-          REMOTE_LATEST="vicenterivas/enganchai:client-latest"
-          TMP_TAG="vicenterivas/enganchai:client-tmp"
-          if ! docker pull $TMP_TAG; then
-            echo "⚠️ Tag $TMP_TAG no existe, recreando desde $REMOTE_LATEST"
-            docker pull $REMOTE_LATEST || { echo "❌ No existe $REMOTE_LATEST"; exit 1; }
-            docker tag $REMOTE_LATEST $TMP_TAG
-            docker push $TMP_TAG
+          TMP=${{ matrix.tmpTag }}
+          LATEST=${{ matrix.latestTag }}
+          OLD=${{ matrix.oldTag }}
+
+          echo "📦 Clonando manifest de $TMP a $LATEST"
+          docker buildx imagetools create --tag $LATEST $TMP
+
+          # Si existía un latest anterior, pásalo a old
+          if docker manifest inspect $LATEST >/dev/null 2>&1; then
+            echo "🔄 Rotando $LATEST → $OLD"
+            docker pull $LATEST
+            docker tag $LATEST $OLD
+            docker push $OLD
           fi
 
-      - name: Build, push tmp and promote for Client
-        run: |
-          REMOTE_LATEST="vicenterivas/enganchai:client-latest"
-          REMOTE_OLD="vicenterivas/enganchai:client-old"
-          TMP_TAG="vicenterivas/enganchai:client-tmp"
-
-          docker pull $REMOTE_LATEST || true
-          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
-
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from=type=registry,ref=$REMOTE_LATEST \
-            --cache-to=type=inline \
-            --tag $TMP_TAG \
-            --push \
-            client
-
-          if [ $? -eq 0 ]; then
-            docker tag $TMP_TAG $REMOTE_LATEST
-            docker push $REMOTE_LATEST
-
-            if [ -n "$OLD_ID" ]; then
-              docker tag $REMOTE_LATEST $REMOTE_OLD
-              docker push $REMOTE_OLD
-            fi
-          else
-            echo "❌ Client tmp build/push failed — no se tocan latest/old tags."
-            exit 1
-          fi
-
-
+  # 3) Oracle DB (imagen oficial reetiquetada)
   build-oracle-db:
-    name: Build & Push Oracle DB
-    needs: [filter]
+    needs: filter
     if: needs.filter.outputs.oracle == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -250,51 +140,34 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 
-
-      - name: Pull, tag and push Oracle DB image
+      - name: Pull & re-tag Oracle XE
         run: |
-          # Definimos nuestros tags en Docker Hub
           REMOTE_LATEST="vicenterivas/enganchai:oracle-db-latest"
           REMOTE_OLD="vicenterivas/enganchai:oracle-db-old"
           TMP_TAG="vicenterivas/enganchai:oracle-db-tmp"
 
-          # Hacemos pull del posible latest existente (cache)
-          docker pull $REMOTE_LATEST || true
-          OLD_ID=$(docker images -q $REMOTE_LATEST || echo "")
-
-          # Pull de la imagen oficial de Oracle DB 21c
           docker pull gvenzl/oracle-xe:21-slim-faststart
 
-          # Tagueamos como TMP y lo subimos
+          echo "🏷️ Etiquetando tmp → $TMP_TAG"
           docker tag gvenzl/oracle-xe:21-slim-faststart $TMP_TAG
           docker push $TMP_TAG
 
-          # Si el push TMP funcionó, promovemos tags
-          if [ $? -eq 0 ]; then
-            docker tag $TMP_TAG $REMOTE_LATEST
-            docker push $REMOTE_LATEST
+          echo "📦 Clonando manifiesto tmp → latest"
+          docker buildx imagetools create --tag $REMOTE_LATEST $TMP_TAG
 
-            # Si existía un latest previo, lo renombramos a “-old” y lo subimos
-            if [ -n "$OLD_ID" ]; then
-              docker tag $REMOTE_LATEST $REMOTE_OLD
-              docker push $REMOTE_OLD
-            fi
-          else
-            echo "❌ Oracle DB tmp push failed — no se tocan latest/old tags."
-            exit 1
+          # Rotar a old
+          if docker manifest inspect $REMOTE_LATEST >/dev/null 2>&1; then
+            docker pull $REMOTE_LATEST
+            docker tag $REMOTE_LATEST $REMOTE_OLD
+            docker push $REMOTE_OLD
           fi
 
+  # 4) Limpieza de tags *-old
   cleanup-old:
     name: Delete tags ending with -old
-    needs: [build-flask, build-express, build-client, build-oracle-db]
+    needs: [build-services, build-oracle-db]
     runs-on: ubuntu-latest
     steps:
-
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -304,45 +177,27 @@ jobs:
       - name: Fetch Docker Hub JWT token
         id: get_token
         run: |
-          # Obtenemos un token JWT para la API de Docker Hub
           TOKEN=$(curl -s -H "Content-Type: application/json" \
             -X POST https://hub.docker.com/v2/users/login/ \
             -d "{\"username\":\"${{ secrets.DOCKER_USERNAME }}\",\"password\":\"${{ secrets.DOCKER_PASSWORD }}\"}" \
             | jq -r .token)
-
-          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
-            echo "❌ Error: no se pudo obtener token de Docker Hub."
-            exit 1
-          fi
-
           echo "::set-output name=token::$TOKEN"
 
-      - name: List and delete tags ending in -old
+      - name: Delete "-old" tags
         env:
-          REPO: "vicenterivas/enganchai"      # <— Reemplaza con tu repositorio real en Docker Hub
+          REPO: "vicenterivas/enganchai"
           TOKEN: ${{ steps.get_token.outputs.token }}
         run: |
-          # 1) Listar hasta 100 tags, filtrar los que terminen en "-old"
+          echo "🗑️ Buscando tags '*-old' en $REPO"
           TAGS=$(curl -s -H "Authorization: JWT $TOKEN" \
             "https://hub.docker.com/v2/repositories/$REPO/tags?page_size=100" \
             | jq -r '.results[].name | select(test("-old$"))')
 
-          if [ -z "$TAGS" ]; then
-            echo "ℹ️ No se encontraron tags que terminen en -old."
-            exit 0
-          fi
-
-          # 2) Iterar sobre cada tag encontrado y borrarlo vía API
           for tag in $TAGS; do
-            echo "🗑️ Eliminando tag: $tag"
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            echo "  → Eliminando $tag"
+            HTTP=$(curl -s -o /dev/null -w '%{http_code}' \
               -X DELETE \
               -H "Authorization: JWT $TOKEN" \
               "https://hub.docker.com/v2/repositories/$REPO/tags/$tag/")
-
-            if [ "$HTTP_STATUS" -eq 204 ]; then
-              echo "✅ Tag eliminado: $tag"
-            else
-              echo "❌ Falló al eliminar $tag (HTTP status: $HTTP_STATUS)"
-            fi
+            echo "    Status: $HTTP"
           done
