@@ -18,7 +18,7 @@ on:
 
 jobs:
 
-  Change-checker:
+  filter:
     runs-on: ubuntu-latest
     outputs:
       client: ${{ steps.paths.outputs.client }}
