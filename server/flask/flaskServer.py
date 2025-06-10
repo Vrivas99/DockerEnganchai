@@ -359,6 +359,7 @@ def setCamLink():
 
     try:
         data = request.get_json()
+        print("⚙️ setCamLink payload:", data)
         tempValue = ""
         tempValue = data.get('camLink')
         

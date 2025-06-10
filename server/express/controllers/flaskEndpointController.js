@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { response } = require('express');
 require('dotenv').config();
 let flaskIP = process.env.FLASK_SERVER_URL || 'http://localhost:5001';
 console.log('→ Usando flaskIP =', flaskIP);
@@ -169,6 +170,7 @@ async function setVideoStream(req, res) {
 };
 
 async function setCamLink(req, res) {
+    console.log('⇨ setCamLink payload:', req.body);
     const  link  = req.body.link;
 
     if (link) {
@@ -176,11 +178,16 @@ async function setCamLink(req, res) {
             // Realiza la solicitud POST al servidor Flask
             const response = await axios.post(`${flaskIP}/setCamLink`, {
                 camLink: link
+
             });
             console.log("Link de camara cambiado: ",link)
             return res.status(200).send(response.data);
         } catch (error) {
-            console.error('Error al enviar la solicitud al servidor Flask:', error);
+            console.error('Error al enviar la solicitud al servidor Flask:', {
+                message:error.message,
+                status:error.response?.status,
+                data: error.response?.data
+            });
             return res.status(500).send('Error al comunicar con el servidor Flask');
         }
     } else {
