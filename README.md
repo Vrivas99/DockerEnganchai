@@ -49,9 +49,6 @@ services:
     container_name: flask
     ports:
       - "5001:5001"
-    depends_on:
-      oracle-db:
-        condition: service_healthy
 
   express:
     image: vicenterivas/enganchai:express-latest
@@ -63,6 +60,7 @@ services:
       - DBPASS=${DBPASS}             # Contraseña para ese usuario (p. ej. "3ng4nchAI4adm1nUs3r")
       - DBHOST=${DBHOST}             # Debe ser "oracle-db", nombre del servicio
       - ORACLE_PDB=${ORACLE_PDB}     # PDB name (XEPDB1)
+      - FLASK_SERVER_URL=${FLASK_SERVER_URL}
     ports:
       - "5000:5000"
     depends_on:
@@ -99,6 +97,20 @@ DBHOST=oracle-db
 ORACLE_PDB=XEPDB1
 DBUSER=admin
 DBPASS=3ng4nchAI4adm1nUs3r
+FLASK_SERVER_URL=http://flask:5001
+```
+
+## Organización de proyecto
+
+```plaintext
+db-scripts/
+|  └── 01_setup
+|      └── create_tables.sql 
+|  └── 02_populate
+|      └── populate_tables.sql 
+.env
+|
+docker-compose.yml
 ```
 
 ## Descargar Imagenes
