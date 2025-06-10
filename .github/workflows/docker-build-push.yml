@@ -48,7 +48,7 @@ jobs:
       - name: Build & push Flask tmp
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/arm64 \
             --cache-from type=registry,ref=$REMOTE_LATEST \
             --cache-to type=inline \
             --file server/flask/Dockerfile \
