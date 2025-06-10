@@ -189,7 +189,7 @@ const Navbar = () => {
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem>
-                                <Link href="/history-classes" className="text-neutral-900">
+                                <Link href="/history-classes" disabled className="text-neutral-900">
                                     Historial de Sesiones
                                 </Link>
                             </DropdownMenuItem>
