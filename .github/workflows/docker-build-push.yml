@@ -12,6 +12,7 @@ on:
       - 'server/flask/**'
       - 'server/express/**'
       - 'client/**'
+      - 'db-scripts/**'
       - 'server/flask/Dockerfile'
       - 'server/express/Dockerfile'
       - 'client/Dockerfile'

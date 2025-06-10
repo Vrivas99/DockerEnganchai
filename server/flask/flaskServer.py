@@ -441,4 +441,4 @@ if __name__ == "__main__":
     p2.start()
     p3.start()
     #Abrir servidor de flask
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(host='flask', port=5001, debug=False)
